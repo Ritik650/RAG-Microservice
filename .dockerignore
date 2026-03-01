@@ -1,0 +1,11 @@
+.git/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+qdrant_storage/
+tests/
+.env
+*.md
+!sample_docs/*.md
