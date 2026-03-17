@@ -19,12 +19,13 @@ def point_id(source: str, index: int) -> str:
     return str(uuid.uuid5(_NAMESPACE, f"{source}::{index}"))
 
 
-async def ingest_documents(documents: Iterable, embedder, store, settings) -> dict:
+async def ingest_documents(documents: Iterable, embedder, sparse_encoder, store, settings) -> dict:
     records: list[dict] = []
     doc_count = 0
     for doc in documents:
         doc_count += 1
-        for i, chunk in enumerate(chunk_text(doc.text, settings.chunk_size, settings.chunk_overlap)):
+        chunks = chunk_text(doc.text, settings.chunk_size, settings.chunk_overlap)
+        for i, chunk in enumerate(chunks):
             records.append(
                 {
                     "id": point_id(doc.source, i),
@@ -39,7 +40,12 @@ async def ingest_documents(documents: Iterable, embedder, store, settings) -> di
 
     await store.ensure_ready(settings.embed_dim)
     # Embedding is CPU-bound and synchronous -> run off the event loop.
-    vectors = await run_in_threadpool(embedder.encode, [r["text"] for r in records])
-    points = [{**r, "vector": v} for r, v in zip(records, vectors)]
+    texts = [r["text"] for r in records]
+    vectors = await run_in_threadpool(embedder.encode, texts)
+    sparse = await run_in_threadpool(sparse_encoder.encode_docs, texts)
+    points = [
+        {**r, "vector": v, "sparse_indices": idx, "sparse_values": val}
+        for r, v, (idx, val) in zip(records, vectors, sparse, strict=True)
+    ]
     await store.upsert(points)
     return {"documents": doc_count, "chunks_upserted": len(points)}

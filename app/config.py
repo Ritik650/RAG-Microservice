@@ -22,11 +22,27 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = None
     collection_name: str = "rag_chunks"
 
-    # --- Embeddings (sentence-transformers) ---
+    # --- Embeddings (sentence-transformers dense + fastembed BM25 sparse) ---
     embed_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embed_dim: int = 384  # must match embed_model's output dimension
+    sparse_model: str = "Qdrant/bm25"
 
     # --- Chunking / retrieval ---
     chunk_size: int = 800      # characters per chunk (word-boundary aware)
     chunk_overlap: int = 120   # characters of overlap between adjacent chunks
-    top_k: int = 5             # default number of chunks retrieved per query
+    top_k: int = 5             # chunks handed to the LLM per query
+    candidate_k: int = 20      # fused candidates retrieved before reranking
+    rrf_k: int = 60            # RRF smoothing constant
+
+    # --- Reranking (cross-encoder) ---
+    rerank_enabled: bool = True
+    rerank_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    # --- Auth (optional JWT on /ingest and /query) ---
+    auth_enabled: bool = False
+    jwt_secret: str = "change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_ttl_seconds: int = 3600
+
+    # --- Evaluation ---
+    qa_set_path: str = "eval/qa_set.jsonl"
