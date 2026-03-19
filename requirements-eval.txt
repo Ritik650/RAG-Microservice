@@ -1,0 +1,5 @@
+# Optional: only needed for `python eval/run_ragas.py --ragas` (RAGAS generation eval).
+# The retrieval-only gate needs nothing beyond requirements.txt.
+ragas>=0.2
+datasets>=2.19
+langchain-google-genai>=2.0
