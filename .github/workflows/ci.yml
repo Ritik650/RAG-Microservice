@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dev dependencies (light — tests use fakes)
+        run: pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Unit + integration tests
+        run: pytest -q
+
+  eval-gate:
+    name: Retrieval-quality regression gate
+    runs-on: ubuntu-latest
+    needs: lint-test
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install full dependencies (embedding + rerank models)
+        run: pip install -r requirements.txt
+      - name: Run retrieval eval and enforce thresholds
+        env:
+          QDRANT_URL: http://localhost:6333
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        # Fails the build if recall@k / MRR drop below thresholds.
+        # Adds the RAGAS generation eval automatically when a Gemini key is configured.
+        run: |
+          if [ -n "$GEMINI_API_KEY" ]; then
+            pip install -r requirements-eval.txt
+            python eval/run_ragas.py --ragas --json eval_results.json
+          else
+            python eval/run_ragas.py --json eval_results.json
+          fi
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval_results.json
+          if-no-files-found: ignore
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint-test, eval-gate]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t rag-microservice:${{ github.sha }} .

@@ -25,7 +25,7 @@ def test_adjacent_chunks_overlap():
     text = " ".join(f"token{i}" for i in range(500))
     chunks = chunk_text(text, 120, 40)
     assert len(chunks) > 1
-    for a, b in zip(chunks, chunks[1:]):
+    for a, b in zip(chunks, chunks[1:], strict=False):
         # With a 40-char overlap, consecutive chunks must share at least one token.
         assert set(a.split()) & set(b.split()), "expected overlapping tokens between chunks"
 
