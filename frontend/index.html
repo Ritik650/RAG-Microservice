@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>DocRAG — Document Q&amp;A</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;family=Geist:wght@600;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+    body { background-color: #0b1326; color: #dae2fd; }
+    .material-symbols-outlined { font-family: 'Material Symbols Outlined'; font-size: 20px; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    @keyframes pulse-dots {
+        0%, 100% { opacity: 0.3; transform: translateY(0); }
+        50% { opacity: 1; transform: translateY(-2px); }
+    }
+    .dot-1 { animation: pulse-dots 1.5s infinite 0s; }
+    .dot-2 { animation: pulse-dots 1.5s infinite 0.2s; }
+    .dot-3 { animation: pulse-dots 1.5s infinite 0.4s; }
+</style>
+<script>
+    tailwind.config = {
+        darkMode: "class",
+        theme: {
+            extend: {
+                colors: {
+                    "background": "#0b1326",
+                    "surface": "#0b1326",
+                    "surface-container-lowest": "#060e20",
+                    "surface-container-low": "#131b2e",
+                    "surface-container": "#171f33",
+                    "surface-container-high": "#222a3d",
+                    "surface-container-highest": "#2d3449",
+                    "on-surface": "#dae2fd",
+                    "on-surface-variant": "#c7c4d7",
+                    "outline": "#908fa0",
+                    "outline-variant": "#464554",
+                    "primary": "#c0c1ff",
+                    "on-primary": "#1000a9",
+                    "primary-container": "#8083ff",
+                    "on-primary-container": "#0d0096",
+                    "secondary-container": "#3c4a5e",
+                    "on-secondary-container": "#abb9d2",
+                    "tertiary": "#ffb783",
+                    "error": "#ffb4ab"
+                },
+                borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                spacing: { "xs": "4px", "sm": "8px", "md": "16px", "lg": "24px", "xl": "32px", "container-max": "1280px" },
+                fontFamily: {
+                    "headline": ["Geist", "sans-serif"],
+                    "body": ["Inter", "sans-serif"],
+                    "code": ["JetBrains Mono", "monospace"]
+                }
+            }
+        }
+    };
+</script>
+</head>
+<body class="flex flex-col h-screen overflow-hidden font-body">
+
+<!-- TopNavBar -->
+<header class="fixed top-0 left-0 w-full z-50 bg-surface flex justify-between items-center px-lg h-16 border-b border-outline-variant">
+    <div class="flex items-center gap-md">
+        <span class="font-headline text-xl font-bold text-primary">DocRAG</span>
+        <div class="bg-primary-container px-sm py-xs rounded-full flex items-center gap-xs">
+            <span id="status-pill" class="font-code text-[10px] tracking-widest text-on-primary-container font-bold">CONNECTING…</span>
+        </div>
+    </div>
+    <div class="flex items-center gap-md">
+        <a href="/docs" title="API docs" class="material-symbols-outlined text-on-surface-variant hover:bg-surface-container-high p-xs rounded transition-colors">api</a>
+    </div>
+</header>
+
+<!-- Sidebar -->
+<nav class="hidden lg:flex flex-col h-full w-[260px] bg-surface-container-low border-r border-outline-variant fixed left-0 top-16 pt-md px-md pb-24">
+    <div class="flex flex-col gap-sm flex-grow">
+        <button onclick="newChat()" class="flex items-center gap-md px-md py-sm bg-secondary-container text-on-secondary-container rounded-lg text-sm transition-all duration-200 hover:opacity-90">
+            <span class="material-symbols-outlined">add_comment</span><span>New Chat</span>
+        </button>
+        <button onclick="runEval()" class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high rounded-lg text-sm transition-colors">
+            <span class="material-symbols-outlined">query_stats</span><span>Run Retrieval Eval</span>
+        </button>
+        <a href="/docs" class="flex items-center gap-md px-md py-sm text-on-surface-variant hover:bg-surface-container-high rounded-lg text-sm transition-colors">
+            <span class="material-symbols-outlined">menu_book</span><span>API Docs</span>
+        </a>
+    </div>
+    <div class="pt-md border-t border-outline-variant">
+        <p class="font-code text-[10px] tracking-widest text-on-surface-variant">HYBRID (DENSE + BM25) · RRF<br/>CROSS-ENCODER RERANK</p>
+    </div>
+</nav>
+
+<!-- Main Chat Canvas -->
+<main class="flex-grow pt-16 pb-32 lg:ml-[260px] relative">
+    <div class="max-w-container-max mx-auto h-full overflow-y-auto px-md md:px-lg py-xl custom-scrollbar" id="chat-container">
+        <div id="messages">
+            <div class="flex justify-start mb-xl">
+                <div class="max-w-[85%] bg-surface-container border border-outline-variant rounded-xl rounded-tl-none p-lg">
+                    <p class="text-on-surface leading-relaxed text-[15px]">
+                        Ask a question about the indexed documents. Answers are grounded in retrieved
+                        chunks and every claim carries an inline citation like
+                        <span class="inline-flex items-center justify-center w-5 h-5 bg-primary-container text-on-primary-container text-[10px] font-bold rounded-sm mx-1">[1]</span>
+                        that maps to a source card below the answer.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Fixed Bottom Composer -->
+<div class="fixed bottom-0 left-0 lg:left-[260px] right-0 p-md md:p-lg bg-gradient-to-t from-background via-background to-transparent pointer-events-none">
+    <div class="max-w-container-max mx-auto pointer-events-auto">
+        <form id="composer" class="bg-surface-container-high border border-outline-variant rounded-xl p-sm shadow-xl flex items-center gap-sm focus-within:border-primary-container transition-colors">
+            <input id="file-input" type="file" multiple class="hidden"
+                   accept=".pdf,.docx,.html,.htm,.csv,.tsv,.txt,.md,.rst,.log"/>
+            <button id="attach" type="button" title="Upload documents (PDF, Word, HTML, CSV, text)"
+                    class="material-symbols-outlined text-on-surface-variant hover:text-primary p-sm transition-colors disabled:opacity-40">attach_file</button>
+            <input id="question" autocomplete="off"
+                   class="flex-grow bg-transparent border-none focus:ring-0 text-on-surface placeholder:text-outline/50 px-sm text-[15px]"
+                   placeholder="Ask a question about your documents..." type="text"/>
+            <button id="send" type="submit"
+                    class="bg-primary hover:opacity-90 disabled:opacity-40 text-on-primary w-10 h-10 rounded-lg flex items-center justify-center transition-all active:scale-95">
+                <span class="material-symbols-outlined font-bold">arrow_upward</span>
+            </button>
+        </form>
+        <div class="flex justify-center mt-xs">
+            <span id="footer-note" class="font-code text-[10px] tracking-widest text-outline/40">HYBRID RETRIEVAL · RRF · CROSS-ENCODER RERANK</span>
+        </div>
+    </div>
+</div>
+
+<script>
+// Same-origin by default; set localStorage.RAG_API to point at a remote backend,
+// and localStorage.RAG_TOKEN to send a Bearer JWT when auth is enabled.
+const API = localStorage.getItem("RAG_API") || "";
+const chat = document.getElementById("chat-container");
+const messages = document.getElementById("messages");
+const form = document.getElementById("composer");
+const input = document.getElementById("question");
+const sendBtn = document.getElementById("send");
+
+function headers() {
+    const h = { "content-type": "application/json" };
+    const token = localStorage.getItem("RAG_TOKEN");
+    if (token) h["authorization"] = "Bearer " + token;
+    return h;
+}
+
+function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Turn [n] markers in escaped text into styled citation badges.
+function withBadges(escaped) {
+    return escaped.replace(/\[(\d+)\]/g,
+        '<span class="inline-flex items-center justify-center w-5 h-5 bg-primary-container text-on-primary-container text-[10px] font-bold rounded-sm mx-1">[$1]</span>');
+}
+
+function scrollDown() { chat.scrollTop = chat.scrollHeight; }
+
+function addUserMessage(text) {
+    const div = document.createElement("div");
+    div.className = "flex justify-end mb-xl";
+    div.innerHTML = `<div class="max-w-[80%] md:max-w-[60%] bg-surface-container-highest border border-outline-variant rounded-xl rounded-tr-none p-md">
+        <p class="text-on-surface text-[15px]">${esc(text)}</p></div>`;
+    messages.appendChild(div);
+    scrollDown();
+}
+
+function addAssistantShell() {
+    const wrap = document.createElement("div");
+    wrap.className = "flex justify-start mb-xl";
+    wrap.innerHTML = `<div class="max-w-[90%] md:max-w-[85%] w-full">
+      <div class="bg-surface-container border border-outline-variant rounded-xl rounded-tl-none p-lg">
+        <p class="answer text-on-surface leading-relaxed text-[15px] whitespace-pre-wrap"></p>
+        <div class="sources hidden border-t border-outline-variant pt-md mt-md">
+            <h3 class="font-code text-[11px] tracking-widest text-outline mb-md flex items-center gap-xs">
+                <span class="material-symbols-outlined text-[14px]">description</span> SOURCES</h3>
+            <div class="cards grid grid-cols-1 md:grid-cols-2 gap-md"></div>
+        </div>
+        <div class="typing mt-md flex items-center gap-1 opacity-70">
+            <div class="w-1.5 h-1.5 bg-primary rounded-full dot-1"></div>
+            <div class="w-1.5 h-1.5 bg-primary rounded-full dot-2"></div>
+            <div class="w-1.5 h-1.5 bg-primary rounded-full dot-3"></div>
+            <span class="font-code text-[10px] tracking-widest ml-sm text-outline">STREAMING…</span>
+        </div>
+      </div></div>`;
+    messages.appendChild(wrap);
+    scrollDown();
+    return wrap;
+}
+
+function renderCitations(shell, citations) {
+    const cards = shell.querySelector(".cards");
+    citations.forEach((c, i) => {
+        const card = document.createElement("div");
+        card.className = "bg-surface-container-low border border-outline-variant rounded-lg p-sm flex flex-col gap-xs hover:border-primary transition-colors";
+        card.innerHTML = `<div class="flex justify-between items-start">
+            <div class="flex items-center gap-sm min-w-0">
+                <span class="w-5 h-5 shrink-0 bg-primary text-on-primary text-[10px] font-bold flex items-center justify-center rounded">${i + 1}</span>
+                <code class="font-code text-[13px] text-primary truncate">${esc(c.source)}#chunk${c.chunk_index}</code>
+            </div>
+            <span class="font-code text-[10px] tracking-widest text-tertiary shrink-0 ml-sm">SCORE ${Number(c.score).toFixed(3)}</span>
+        </div>
+        <p class="text-on-surface-variant text-[12px] line-clamp-2 italic">“${esc(c.snippet)}”</p>`;
+        cards.appendChild(card);
+    });
+    if (citations.length) shell.querySelector(".sources").classList.remove("hidden");
+}
+
+async function ask(question) {
+    addUserMessage(question);
+    const shell = addAssistantShell();
+    const answerEl = shell.querySelector(".answer");
+    let raw = "";
+    sendBtn.disabled = true;
+    try {
+        const res = await fetch(API + "/query", {
+            method: "POST",
+            headers: headers(),
+            body: JSON.stringify({ question, stream: true })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const events = buffer.split("\n\n");
+            buffer = events.pop();
+            for (const block of events) {
+                let event = "", data = "";
+                for (const line of block.split("\n")) {
+                    if (line.startsWith("event: ")) event = line.slice(7);
+                    else if (line.startsWith("data: ")) data = line.slice(6);
+                }
+                if (event === "token") {
+                    raw += JSON.parse(data).text;
+                    answerEl.innerHTML = withBadges(esc(raw));
+                    scrollDown();
+                } else if (event === "citations") {
+                    renderCitations(shell, JSON.parse(data).citations);
+                }
+            }
+        }
+    } catch (err) {
+        answerEl.innerHTML = `<span class="text-error">${esc(String(err))}</span>`;
+    } finally {
+        shell.querySelector(".typing").remove();
+        sendBtn.disabled = false;
+        scrollDown();
+        refreshStatus();
+    }
+}
+
+function newChat() {
+    messages.innerHTML = "";
+    input.focus();
+}
+
+async function runEval() {
+    const shell = addAssistantShell();
+    const answerEl = shell.querySelector(".answer");
+    answerEl.textContent = "Running retrieval evaluation on the labeled QA set…";
+    try {
+        const res = await fetch(API + "/eval", { method: "POST", headers: headers() });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const m = await res.json();
+        answerEl.innerHTML = `<code class="font-code text-[12px] whitespace-pre">${esc(JSON.stringify(m, null, 2))}</code>`;
+    } catch (err) {
+        answerEl.innerHTML = `<span class="text-error">${esc(String(err))}</span>`;
+    } finally {
+        shell.querySelector(".typing").remove();
+        scrollDown();
+    }
+}
+
+async function refreshStatus() {
+    const pill = document.getElementById("status-pill");
+    try {
+        const res = await fetch(API + "/healthz");
+        const h = await res.json();
+        pill.textContent = h.chunks_indexed !== undefined
+            ? `${h.chunks_indexed} CHUNKS INDEXED` : "QDRANT UNREACHABLE";
+        document.getElementById("footer-note").textContent =
+            `HYBRID · RRF · RERANK · ${(h.llm_model || "").toUpperCase()}`;
+    } catch { pill.textContent = "API OFFLINE"; }
+}
+
+const fileInput = document.getElementById("file-input");
+const attachBtn = document.getElementById("attach");
+
+async function uploadFiles(fileList) {
+    const shell = addAssistantShell();
+    const answerEl = shell.querySelector(".answer");
+    const names = [...fileList].map((f) => f.name).join(", ");
+    answerEl.textContent = `Ingesting ${fileList.length} file(s): ${names} …`;
+    attachBtn.disabled = true;
+    try {
+        const body = new FormData();
+        for (const f of fileList) body.append("files", f);
+        const h = headers();
+        delete h["content-type"]; // browser sets the multipart boundary
+        const res = await fetch(API + "/ingest/files", { method: "POST", headers: h, body });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+        const r = await res.json();
+        answerEl.innerHTML = `Ingested <b>${r.documents}</b> document(s) → <b>${r.chunks_upserted}</b> chunks upserted to <code class="font-code text-[13px] text-primary">${esc(r.collection)}</code>. Ask away.`;
+    } catch (err) {
+        answerEl.innerHTML = `<span class="text-error">${esc(String(err))}</span>`;
+    } finally {
+        shell.querySelector(".typing").remove();
+        attachBtn.disabled = false;
+        fileInput.value = "";
+        refreshStatus();
+        scrollDown();
+    }
+}
+
+attachBtn.addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => {
+    if (fileInput.files.length) uploadFiles(fileInput.files);
+});
+
+form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = input.value.trim();
+    if (!q || sendBtn.disabled) return;
+    input.value = "";
+    ask(q);
+});
+
+refreshStatus();
+input.focus();
+</script>
+</body>
+</html>
