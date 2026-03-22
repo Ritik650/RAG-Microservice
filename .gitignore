@@ -7,5 +7,6 @@ venv/
 .mypy_cache/
 qdrant_storage/
 models/
+eval_results_local.json
 *.egg-info/
 .DS_Store
