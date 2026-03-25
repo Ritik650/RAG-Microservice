@@ -1,3 +1,13 @@
+---
+title: RAG Microservice
+emoji: 🔍
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # RAG Retrieval Microservice with Evaluation
 
 A corpus-agnostic document Q&A service — upload or drop in a folder of documents

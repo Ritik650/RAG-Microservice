@@ -114,8 +114,11 @@ async def healthz(
         "rerank_model": settings.rerank_model if settings.rerank_enabled else None,
     }
     try:
-        out["chunks_indexed"] = await store.count()
+        count = await store.count()
         out["qdrant"] = "reachable"
+        # -1 means the collection hasn't been created yet (fresh cluster, no ingest).
+        out["chunks_indexed"] = count if count >= 0 else 0
+        out["collection_ready"] = count >= 0
     except Exception:
         out["qdrant"] = "unreachable"
     return out

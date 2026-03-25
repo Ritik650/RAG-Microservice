@@ -93,6 +93,10 @@ class QdrantStore:
         }
 
     async def count(self) -> int:
+        """Number of indexed chunks, or -1 if the collection hasn't been created yet
+        (distinct from a connectivity failure, which propagates as an exception)."""
+        if not await self.client.collection_exists(self.collection):
+            return -1
         return (await self.client.count(self.collection, exact=True)).count
 
     async def close(self) -> None:
