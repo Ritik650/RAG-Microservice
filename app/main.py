@@ -185,8 +185,9 @@ async def query(
     store: QdrantStore = Depends(get_store),
     generator: GeminiGenerator = Depends(get_generator),
     reranker: CrossEncoderReranker = Depends(get_reranker),
-    _claims: dict | None = Depends(require_auth),
 ):
+    # /query is intentionally public (read-only) so the live demo works without a
+    # token. Write endpoints (/ingest, /ingest/files) are the ones behind auth.
     await store.ensure_ready(settings.embed_dim)
     top_k = req.top_k or settings.top_k
 

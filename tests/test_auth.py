@@ -29,7 +29,7 @@ def test_expired_token_rejected():
         verify_token(token, secret=SECRET)
 
 
-def test_endpoints_enforce_auth_when_enabled():
+def test_write_endpoints_require_auth_but_reads_stay_public():
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -37,32 +37,25 @@ def test_endpoints_enforce_auth_when_enabled():
 
     client, _ = make_client()
     assert isinstance(client, TestClient)
+    doc = {"documents": [{"source": "a.txt", "text": "hello world"}]}
     with client:
         app.state.settings.auth_enabled = True
         app.state.settings.jwt_secret = SECRET
         try:
-            # No token -> 401
-            resp = client.post("/query", json={"question": "hi"})
-            assert resp.status_code == 401
+            # Writes: no token / garbage token -> 401
+            assert client.post("/ingest", json=doc).status_code == 401
+            assert client.post(
+                "/ingest", json=doc, headers={"authorization": "Bearer not-a-jwt"}
+            ).status_code == 401
 
-            # Garbage token -> 401
-            resp = client.post(
-                "/query",
-                json={"question": "hi"},
-                headers={"authorization": "Bearer not-a-jwt"},
-            )
-            assert resp.status_code == 401
-
-            # Valid token -> 200
+            # Writes: valid token -> 200
             token = create_token("tester", secret=SECRET, ttl_seconds=60)
-            resp = client.post(
-                "/query",
-                json={"question": "hi"},
-                headers={"authorization": f"Bearer {token}"},
-            )
-            assert resp.status_code == 200
+            assert client.post(
+                "/ingest", json=doc, headers={"authorization": f"Bearer {token}"}
+            ).status_code == 200
 
-            # /healthz stays public
+            # Reads stay public even with auth enabled (so the live demo works).
+            assert client.post("/query", json={"question": "hi"}).status_code == 200
             assert client.get("/healthz").status_code == 200
         finally:
             app.state.settings.auth_enabled = False
